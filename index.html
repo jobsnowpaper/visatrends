@@ -1,342 +1,532 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VisaTrends Portal - U.S. Visa Issuance Statistics</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://unpkg.com/recharts@2.5.0/dist/Recharts.js"></script>
-</head>
-<body>
-  <div id="root"></div>
-  
-  <script type="text/babel">
-    const { useState, useMemo, useEffect } = React;
-    const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
-
-    const VisaTrendsVisualizer = () => {
-      const [csvData, setCsvData] = useState([]);
-      const [selectedCountry, setSelectedCountry] = useState('');
-      const [selectedVisa, setSelectedVisa] = useState('');
-      const [loading, setLoading] = useState(true);
-      const [error, setError] = useState('');
-      const [searchCountry, setSearchCountry] = useState('');
-      const [searchVisa, setSearchVisa] = useState('');
-
-      const CSV_URL = 'https://raw.githubusercontent.com/jobsnowpaper/visatrends/main/data/monthly_nonimmigrant_visa_issuance_statistics.csv';
-
-      useEffect(() => {
-        const fetchCSV = async () => {
-          try {
-            setLoading(true);
-            const response = await fetch(CSV_URL);
-            
-            if (!response.ok) {
-              throw new Error('Failed to fetch CSV file');
-            }
-            
-            const text = await response.text();
-            const lines = text.trim().split('\n');
-            const dataLines = lines.slice(1);
-            
-            const parsed = dataLines.map(line => {
-              const parts = line.split(',');
-              if (parts.length < 4) return null;
-              
-              return {
-                monthYear: parts[0].trim(),
-                nationality: parts[1].trim(),
-                visaClass: parts[2].trim(),
-                issuances: parseInt(parts[3].trim()) || 0
-              };
-            }).filter(Boolean);
-
-            if (parsed.length === 0) {
-              setError('No valid data found in CSV file');
-            } else {
-              setCsvData(parsed);
-            }
-          } catch (err) {
-            setError(`Error loading data: ${err.message}`);
-            console.error(err);
-          } finally {
-            setLoading(false);
-          }
-        };
-
-        fetchCSV();
-      }, []);
-
-      const countries = useMemo(() => {
-        if (csvData.length === 0) return [];
-        const unique = [...new Set(csvData.map(d => d.nationality))];
-        const sorted = unique.sort();
-        
-        if (!searchCountry) return sorted;
-        
-        return sorted.filter(country => 
-          country.toLowerCase().includes(searchCountry.toLowerCase())
-        );
-      }, [csvData, searchCountry]);
-
-      const visaClasses = useMemo(() => {
-        if (!selectedCountry || csvData.length === 0) return [];
-        const filtered = csvData.filter(d => d.nationality === selectedCountry);
-        const unique = [...new Set(filtered.map(d => d.visaClass))];
-        const sorted = unique.sort();
-        
-        if (!searchVisa) return sorted;
-        
-        return sorted.filter(visa => 
-          visa.toLowerCase().includes(searchVisa.toLowerCase())
-        );
-      }, [csvData, selectedCountry, searchVisa]);
-
-      const chartData = useMemo(() => {
-        if (!selectedCountry || !selectedVisa || csvData.length === 0) return [];
-        
-        const filtered = [];
-        for (let i = 0; i < csvData.length; i++) {
-          const d = csvData[i];
-          if (d.nationality === selectedCountry && d.visaClass === selectedVisa) {
-            filtered.push({
-              month: d.monthYear,
-              issuances: d.issuances
-            });
-          }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>US Visa Issuance Visualizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
         
-        return filtered;
-      }, [csvData, selectedCountry, selectedVisa]);
-
-      const stats = useMemo(() => {
-        if (chartData.length === 0) return null;
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
         
-        const total = chartData.reduce((sum, d) => sum + d.issuances, 0);
-        const avg = total / chartData.length;
-        const peak = chartData.reduce((max, d) => d.issuances > max.issuances ? d : max, chartData[0]);
-        const min = chartData.reduce((min, d) => d.issuances < min.issuances ? d : min, chartData[0]);
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
         
-        return { total, avg, peak, min };
-      }, [chartData]);
-
-      if (loading) {
-        return (
-          <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-            <div className="bg-white rounded-2xl shadow-xl p-12 text-center">
-              <svg className="animate-spin h-12 w-12 text-blue-600 mx-auto mb-4" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-              <p className="text-gray-600 text-lg">Loading visa data...</p>
-              <p className="text-gray-500 text-sm mt-2">This may take a moment for large datasets</p>
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.2em;
+            color: #667eea;
+        }
+        
+        .loading-bar {
+            width: 100%;
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+        
+        .loading-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s;
+        }
+        
+        .error {
+            background: #fee;
+            border: 2px solid #fcc;
+            color: #c33;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        label {
+            font-weight: 600;
+            color: #444;
+            margin-bottom: 8px;
+            font-size: 0.95em;
+        }
+        
+        select {
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            background: white;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+        
+        select:hover {
+            border-color: #667eea;
+        }
+        
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-top: 30px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .stat-label {
+            font-size: 0.85em;
+            opacity: 0.9;
+            margin-bottom: 8px;
+        }
+        
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #1565c0;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 1.8em;
+            }
+            
+            .chart-container {
+                height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌍 US Visa Issuance Visualizer</h1>
+        <p class="subtitle">Explore visa issuance trends by country and visa type</p>
+        
+        <div id="loading" class="loading">
+            Loading data... <span id="loadingText">0%</span>
+            <div class="loading-bar">
+                <div id="loadingProgress" class="loading-progress"></div>
             </div>
-          </div>
-        );
-      }
-
-      if (error) {
-        return (
-          <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-8">
-            <div className="bg-white rounded-2xl shadow-xl p-12 text-center max-w-2xl">
-              <div className="text-red-600 mb-4">
-                <svg className="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">Error Loading Data</h2>
-              <p className="text-gray-600 mb-4">{error}</p>
-              <button 
-                onClick={() => window.location.reload()} 
-                className="mt-6 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-              >
-                Retry
-              </button>
-            </div>
-          </div>
-        );
-      }
-
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-8">
-          <div className="max-w-7xl mx-auto">
-            <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 mb-8">
-              <div className="mb-6">
-                <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-2">
-                  VisaTrends Portal
-                </h1>
-                <p className="text-gray-600 mb-2">
-                  Explore nonimmigrant visa issuance trends by country and visa category
-                </p>
-                <p className="text-sm text-green-600">
-                  ✓ {csvData.length.toLocaleString()} records loaded
-                </p>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-6 mb-8">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Select Country/Nationality
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Search countries..."
-                    value={searchCountry}
-                    onChange={(e) => setSearchCountry(e.target.value)}
-                    className="w-full px-4 py-2 mb-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  />
-                  <select
-                    value={selectedCountry}
-                    onChange={(e) => {
-                      setSelectedCountry(e.target.value);
-                      setSelectedVisa('');
-                      setSearchVisa('');
-                    }}
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                    size="5"
-                  >
-                    <option value="">-- Choose a country --</option>
-                    {countries.slice(0, 100).map(country => (
-                      <option key={country} value={country}>
-                        {country}
-                      </option>
-                    ))}
-                  </select>
-                  {countries.length > 100 && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Showing first 100 results. Use search to find more.
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Select Visa Category
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Search visa types..."
-                    value={searchVisa}
-                    onChange={(e) => setSearchVisa(e.target.value)}
-                    disabled={!selectedCountry}
-                    className="w-full px-4 py-2 mb-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  />
-                  <select
-                    value={selectedVisa}
-                    onChange={(e) => setSelectedVisa(e.target.value)}
-                    disabled={!selectedCountry}
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    size="5"
-                  >
-                    <option value="">-- Choose a visa category --</option>
-                    {visaClasses.map(visa => (
-                      <option key={visa} value={visa}>
-                        {visa}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {chartData.length > 0 ? (
-                <div className="bg-gray-50 rounded-xl p-4 md:p-6">
-                  <h2 className="text-lg md:text-xl font-semibold text-gray-800 mb-4">
-                    {selectedVisa} Visa Issuances - {selectedCountry}
-                  </h2>
-                  
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
-                    <div className="bg-white p-3 md:p-4 rounded-lg shadow">
-                      <p className="text-xs md:text-sm text-gray-600">Total</p>
-                      <p className="text-lg md:text-2xl font-bold text-blue-600">
-                        {stats.total.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="bg-white p-3 md:p-4 rounded-lg shadow">
-                      <p className="text-xs md:text-sm text-gray-600">Avg/Month</p>
-                      <p className="text-lg md:text-2xl font-bold text-green-600">
-                        {stats.avg.toFixed(0)}
-                      </p>
-                    </div>
-                    <div className="bg-white p-3 md:p-4 rounded-lg shadow">
-                      <p className="text-xs md:text-sm text-gray-600">Peak</p>
-                      <p className="text-sm md:text-base font-bold text-purple-600">
-                        {stats.peak.issuances.toLocaleString()}
-                      </p>
-                      <p className="text-xs text-gray-500">{stats.peak.month}</p>
-                    </div>
-                    <div className="bg-white p-3 md:p-4 rounded-lg shadow">
-                      <p className="text-xs md:text-sm text-gray-600">Lowest</p>
-                      <p className="text-sm md:text-base font-bold text-orange-600">
-                        {stats.min.issuances.toLocaleString()}
-                      </p>
-                      <p className="text-xs text-gray-500">{stats.min.month}</p>
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-4 rounded-lg">
-                    <ResponsiveContainer width="100%" height={400}>
-                      <LineChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                        <XAxis 
-                          dataKey="month" 
-                          tick={{ fontSize: 11 }}
-                          angle={-45}
-                          textAnchor="end"
-                          height={80}
-                        />
-                        <YAxis tick={{ fontSize: 11 }} />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'white', 
-                            border: '1px solid #ccc',
-                            borderRadius: '8px',
-                            fontSize: '14px'
-                          }}
-                        />
-                        <Legend />
-                        <Line 
-                          type="monotone" 
-                          dataKey="issuances" 
-                          stroke="#3b82f6" 
-                          strokeWidth={2}
-                          dot={{ fill: '#3b82f6', r: 3 }}
-                          activeDot={{ r: 5 }}
-                          name="Issuances"
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-gray-50 rounded-xl p-12 text-center">
-                  <svg className="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                  <p className="text-gray-600 text-lg">
-                    Select a country and visa category to view trends
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-4 md:p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">About VisaTrends</h3>
-              <p className="text-gray-600 text-sm">
-                This portal visualizes U.S. nonimmigrant visa issuance statistics over time. 
-                Select a country and visa category to explore trends, peak periods, and issuance patterns. 
-                Data is sourced from official records and updated regularly.
-              </p>
-            </div>
-          </div>
         </div>
-      );
-    };
+        <div id="error" class="error hidden"></div>
+        
+        <div id="controls" class="controls hidden">
+            <div class="control-group">
+                <label for="country">Select Country:</label>
+                <select id="country">
+                    <option value="">Choose a country...</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="visa">Select Visa Type:</label>
+                <select id="visa">
+                    <option value="">Choose a visa type...</option>
+                </select>
+            </div>
+        </div>
+        
+        <div id="statsContainer" class="stats hidden"></div>
+        
+        <div id="chartContainer" class="chart-container hidden">
+            <canvas id="visaChart"></canvas>
+        </div>
+        
+        <div id="info" class="info-box hidden">
+            <strong>Note:</strong> This is a static website hosted on GitHub Pages (free hosting). All data processing happens in your browser. Data source: US Department of State.
+        </div>
+    </div>
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<VisaTrendsVisualizer />);
-  </script>
+    <script>
+        // Optimized data structure using Map for O(1) lookups
+        const dataIndex = new Map();
+        let countries = [];
+        let visaTypes = [];
+        let chart = null;
+        
+        const DATA_URL = 'https://raw.githubusercontent.com/jobsnowpaper/visatrends/refs/heads/main/data/monthly_nonimmigrant_visa_issuance_statistics.csv';
+        
+        // Load and parse CSV data with streaming and optimization
+        async function loadData() {
+            try {
+                const response = await fetch(DATA_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let csvText = '';
+                let receivedLength = 0;
+                const contentLength = +response.headers.get('Content-Length');
+                
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    
+                    receivedLength += value.length;
+                    csvText += decoder.decode(value, {stream: true});
+                    
+                    // Update progress bar
+                    if (contentLength) {
+                        const progress = Math.round((receivedLength / contentLength) * 100);
+                        document.getElementById('loadingText').textContent = progress + '%';
+                        document.getElementById('loadingProgress').style.width = progress + '%';
+                    }
+                }
+                
+                document.getElementById('loadingText').textContent = 'Processing...';
+                
+                // Parse CSV with optimization
+                Papa.parse(csvText, {
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    step: function(row) {
+                        processRow(row.data);
+                    },
+                    complete: function() {
+                        initializeApp();
+                    },
+                    error: function(error) {
+                        showError('Error parsing CSV: ' + error.message);
+                    }
+                });
+                
+            } catch (error) {
+                showError('Error loading data: ' + error.message);
+            }
+        }
+        
+        // Process each row and build optimized index
+        function processRow(row) {
+            const country = row.Nationality;
+            const visaClass = row['Visa Class'];
+            const monthYear = row['Month-Year'];
+            const issuances = row.Issuances || 0;
+            
+            if (!country || !visaClass || !monthYear) return;
+            
+            // Create composite key for fast lookup
+            const key = `${country}|${visaClass}`;
+            
+            if (!dataIndex.has(key)) {
+                dataIndex.set(key, []);
+            }
+            
+            dataIndex.get(key).push({
+                date: monthYear,
+                value: issuances
+            });
+        }
+        
+        function showError(message) {
+            document.getElementById('loading').classList.add('hidden');
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+        
+        function initializeApp() {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('controls').classList.remove('hidden');
+            document.getElementById('info').classList.remove('hidden');
+            
+            // Extract unique countries and visa types from keys
+            const countriesSet = new Set();
+            const visaTypesSet = new Set();
+            
+            for (const key of dataIndex.keys()) {
+                const [country, visa] = key.split('|');
+                countriesSet.add(country);
+                visaTypesSet.add(visa);
+            }
+            
+            countries = Array.from(countriesSet).sort();
+            visaTypes = Array.from(visaTypesSet).sort();
+            
+            populateDropdowns();
+            setupEventListeners();
+        }
+        
+        function populateDropdowns() {
+            const countrySelect = document.getElementById('country');
+            const visaSelect = document.getElementById('visa');
+            
+            // Use DocumentFragment for efficient DOM manipulation
+            const countryFragment = document.createDocumentFragment();
+            countries.forEach(country => {
+                const option = document.createElement('option');
+                option.value = country;
+                option.textContent = country;
+                countryFragment.appendChild(option);
+            });
+            countrySelect.appendChild(countryFragment);
+            
+            const visaFragment = document.createDocumentFragment();
+            visaTypes.forEach(visa => {
+                const option = document.createElement('option');
+                option.value = visa;
+                option.textContent = visa;
+                visaFragment.appendChild(option);
+            });
+            visaSelect.appendChild(visaFragment);
+        }
+        
+        function setupEventListeners() {
+            document.getElementById('country').addEventListener('change', updateVisualization);
+            document.getElementById('visa').addEventListener('change', updateVisualization);
+        }
+        
+        function updateVisualization() {
+            const country = document.getElementById('country').value;
+            const visaType = document.getElementById('visa').value;
+            
+            if (!country || !visaType) {
+                document.getElementById('chartContainer').classList.add('hidden');
+                document.getElementById('statsContainer').classList.add('hidden');
+                return;
+            }
+            
+            const key = `${country}|${visaType}`;
+            const data = dataIndex.get(key);
+            
+            if (!data || data.length === 0) {
+                showError('No data available for this combination');
+                document.getElementById('chartContainer').classList.add('hidden');
+                document.getElementById('statsContainer').classList.add('hidden');
+                return;
+            }
+            
+            document.getElementById('error').classList.add('hidden');
+            
+            // Sort data by date
+            data.sort((a, b) => parseDate(a.date) - parseDate(b.date));
+            
+            displayChart(data, country, visaType);
+            displayStats(data);
+        }
+        
+        function parseDate(dateStr) {
+            const [month, year] = dateStr.split('-');
+            const monthMap = {
+                'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+                'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+            };
+            return new Date(2000 + parseInt(year), monthMap[month], 1);
+        }
+        
+        function displayChart(data, country, visaType) {
+            document.getElementById('chartContainer').classList.remove('hidden');
+            
+            const labels = data.map(d => d.date);
+            const values = data.map(d => d.value);
+            
+            const ctx = document.getElementById('visaChart').getContext('2d');
+            
+            if (chart) {
+                chart.destroy();
+            }
+            
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: `${visaType} Visas - ${country}`,
+                        data: values,
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 3,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: '#667eea',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            padding: 12,
+                            titleFont: {
+                                size: 14
+                            },
+                            bodyFont: {
+                                size: 13
+                            },
+                            callbacks: {
+                                label: function(context) {
+                                    return 'Visas Issued: ' + context.parsed.y.toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                font: {
+                                    size: 11
+                                },
+                                callback: function(value) {
+                                    return value.toLocaleString();
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Number of Visas Issued',
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                font: {
+                                    size: 10
+                                },
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function displayStats(data) {
+            document.getElementById('statsContainer').classList.remove('hidden');
+            
+            const values = data.map(d => d.value);
+            const total = values.reduce((sum, val) => sum + val, 0);
+            const average = Math.round(total / values.length);
+            const max = Math.max(...values);
+            const min = Math.min(...values);
+            
+            const statsHTML = `
+                <div class="stat-card">
+                    <div class="stat-label">Total Issued</div>
+                    <div class="stat-value">${total.toLocaleString()}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Average/Month</div>
+                    <div class="stat-value">${average.toLocaleString()}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Peak Month</div>
+                    <div class="stat-value">${max.toLocaleString()}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Lowest Month</div>
+                    <div class="stat-value">${min.toLocaleString()}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Data Points</div>
+                    <div class="stat-value">${data.length}</div>
+                </div>
+            `;
+            
+            document.getElementById('statsContainer').innerHTML = statsHTML;
+        }
+        
+        // Start loading data when page loads
+        loadData();
+    </script>
 </body>
 </html>
