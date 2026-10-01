@@ -183,6 +183,7 @@ let chart = null;
 let current = null;
 
 const DATA_URL = 'https://raw.githubusercontent.com/jobsnowpaper/visatrends/refs/heads/main/data/monthly_nonimmigrant_visa_issuance_statistics.csv';
+const WORLDWIDE = '__worldwide__';
 const $ = id => document.getElementById(id);
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
@@ -256,10 +257,35 @@ function initializeApp() {
   countries = Array.from(cs).sort();
   visaTypes = Array.from(vs).sort();
 
-  fillSelect($('country'), countries);
+  buildWorldwide();
+
+  const countrySelect = $('country');
+  const ww = document.createElement('option');
+  ww.value = WORLDWIDE;
+  ww.textContent = 'Worldwide';
+  countrySelect.appendChild(ww);
+  fillSelect(countrySelect, countries);
+  countrySelect.value = WORLDWIDE;
+
   fillSelect($('visa'), visaTypes);
-  $('country').addEventListener('change', updateVisualization);
+  countrySelect.addEventListener('change', updateVisualization);
   $('visa').addEventListener('change', updateVisualization);
+  updateVisualization();
+}
+
+// Sum issuances across all countries for each visa type and month
+function buildWorldwide() {
+  const totals = new Map();
+  for (const [key, rows] of dataIndex) {
+    const visa = key.split('|')[1];
+    if (!totals.has(visa)) totals.set(visa, new Map());
+    const months = totals.get(visa);
+    rows.forEach(r => months.set(r.date, (months.get(r.date) || 0) + r.value));
+  }
+  for (const [visa, months] of totals) {
+    dataIndex.set(`${WORLDWIDE}|${visa}`,
+      Array.from(months, ([date, value]) => ({ date, value })));
+  }
 }
 
 function fillSelect(select, items) {
@@ -314,7 +340,9 @@ function parseDate(str) {
 
 function displayChart(data, country, visaType) {
   $('chartContainer').classList.remove('hidden');
-  $('chartTitle').textContent = `${visaType} visas issued to ${country}`;
+  $('chartTitle').textContent = country === WORLDWIDE
+    ? `${visaType} visas issued worldwide`
+    : `${visaType} visas issued to ${country}`;
   $('chartSub').textContent = `${data[0].date} to ${data[data.length - 1].date}`;
 
   const barColor = css('--chart-bar');
