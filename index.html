@@ -102,7 +102,18 @@ select:focus-visible, a:focus-visible {
 
 .chart-panel { padding: 24px; }
 .chart-title { font-size: 1.05rem; font-weight: 600; }
-.chart-sub { font-size: .85rem; color: var(--muted); margin-bottom: 16px; }
+.chart-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+.chart-sub { font-size: .85rem; color: var(--muted); }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0;
+  padding: 8px 14px; font: inherit; font-size: .875rem; font-weight: 600;
+  color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+  transition: border-color .15s, background-color .15s;
+}
+.btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+.btn:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.btn svg { width: 16px; height: 16px; }
 .chart-box { position: relative; height: 420px; }
 
 .state { padding: 48px 24px; text-align: center; color: var(--muted); }
@@ -165,8 +176,16 @@ footer a { color: var(--accent); word-break: break-all; }
   <section id="statsContainer" class="stats hidden"></section>
 
   <section id="chartContainer" class="panel chart-panel hidden">
-    <div class="chart-title" id="chartTitle"></div>
-    <div class="chart-sub" id="chartSub"></div>
+    <div class="chart-head">
+      <div>
+        <div class="chart-title" id="chartTitle"></div>
+        <div class="chart-sub" id="chartSub"></div>
+      </div>
+      <button type="button" id="exportBtn" class="btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+        Export CSV
+      </button>
+    </div>
     <div class="chart-box"><canvas id="visaChart"></canvas></div>
   </section>
 
@@ -416,6 +435,33 @@ function displayStats(data) {
   ).join('');
   $('statsContainer').classList.remove('hidden');
 }
+
+function csvCell(v) {
+  const s = String(v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function exportCSV() {
+  if (!current) return;
+  const { data, country, visaType } = current;
+  const label = country === WORLDWIDE ? 'Worldwide' : country;
+  const rows = [['Nationality', 'Visa Class', 'Month-Year', 'Issuances']]
+    .concat(data.map(d => [label, visaType, d.date, d.value]));
+  // BOM keeps accented country names intact when opened in Excel
+  const csv = '\uFEFF' + rows.map(r => r.map(csvCell).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  a.href = url;
+  a.download = `visatrends-${slug(label)}-${slug(visaType)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+$('exportBtn').addEventListener('click', exportCSV);
 
 // Re-draw chart colors when the system theme changes
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
