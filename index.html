@@ -18,10 +18,12 @@
   --border: #e2e8f0;
   --accent: #2563eb;
   --accent-soft: #dbeafe;
-  --chart-bar: #3b82f6;
-  --chart-bar-hover: #1d4ed8;
   --grid: #e8edf3;
   --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px rgba(15,23,42,.06);
+  /* Categorical series (validated palette, fixed order) */
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300;
+  /* Sequential ramp for the heatmap (one hue, low -> high) */
+  --ramp-lo: #e6effc; --ramp-hi: #1b4f9e;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -32,10 +34,10 @@
     --border: #25314a;
     --accent: #60a5fa;
     --accent-soft: #1e3a5f;
-    --chart-bar: #60a5fa;
-    --chart-bar-hover: #93c5fd;
     --grid: #22304a;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
+    --ramp-lo: #182a47; --ramp-hi: #8dbbf5;
   }
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -49,9 +51,9 @@ body {
 }
 .wrap { max-width: 1120px; margin: 0 auto; padding: 48px 24px 64px; }
 
-header { margin-bottom: 32px; }
+header { margin-bottom: 28px; }
 h1 { font-size: clamp(1.6rem, 3vw, 2.1rem); font-weight: 700; letter-spacing: -0.02em; }
-.subtitle { color: var(--muted); margin-top: 6px; max-width: 60ch; }
+.subtitle { color: var(--muted); margin-top: 6px; max-width: 64ch; }
 
 .panel {
   background: var(--surface);
@@ -60,11 +62,27 @@ h1 { font-size: clamp(1.6rem, 3vw, 2.1rem); font-weight: 700; letter-spacing: -0
   box-shadow: var(--shadow);
 }
 
+/* View tabs */
+.tabs {
+  display: flex; gap: 4px; padding: 4px; margin-bottom: 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  overflow-x: auto; scrollbar-width: thin;
+}
+.tab {
+  flex: 0 0 auto; padding: 9px 14px; font: inherit; font-size: .9rem; font-weight: 600;
+  color: var(--muted); background: transparent; border: 0; border-radius: 8px; cursor: pointer;
+  white-space: nowrap; transition: color .15s, background-color .15s;
+}
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] { color: var(--accent); background: var(--accent-soft); }
+.tab:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.view-help { color: var(--muted); font-size: .92rem; margin: 0 2px 16px; max-width: 80ch; }
+
 .controls {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
-  padding: 20px;
+  padding: 18px 20px;
   margin-bottom: 20px;
 }
 .field label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: 6px; }
@@ -90,20 +108,13 @@ select:focus-visible, a:focus-visible {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-.stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
-}
-.stat { padding: 16px 20px; }
-.stat-label { font-size: .8rem; color: var(--muted); font-weight: 500; }
-.stat-value { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
-
 .chart-panel { padding: 24px; }
+.chart-panel.bare { padding: 0; background: transparent; border: 0; box-shadow: none; }
+.chart-panel.bare .chart-head { padding: 0 2px; }
 .chart-title { font-size: 1.05rem; font-weight: 600; }
 .chart-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
 .chart-sub { font-size: .85rem; color: var(--muted); }
+.btn-group { display: flex; gap: 8px; flex-shrink: 0; }
 .btn {
   display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0;
   padding: 8px 14px; font: inherit; font-size: .875rem; font-weight: 600;
@@ -116,6 +127,101 @@ select:focus-visible, a:focus-visible {
 .btn svg { width: 16px; height: 16px; }
 .chart-box { position: relative; height: 420px; }
 
+/* Toolbar: segmented toggles + chips */
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-bottom: 16px; }
+.toolbar:empty { display: none; }
+.tool { display: flex; align-items: center; gap: 8px; }
+.tool-label { font-size: .8rem; font-weight: 600; color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button {
+  padding: 6px 12px; font: inherit; font-size: .82rem; font-weight: 600;
+  background: var(--surface); color: var(--muted); border: 0; cursor: pointer;
+}
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.seg button:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 8px; padding: 5px 6px 5px 10px;
+  border: 1px solid var(--border); border-radius: 999px; font-size: .85rem; font-weight: 600;
+}
+.chip .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+.chip button {
+  width: 20px; height: 20px; border: 0; border-radius: 50%; cursor: pointer; line-height: 1;
+  background: transparent; color: var(--muted); font-size: 1rem;
+}
+.chip button:hover { background: var(--accent-soft); color: var(--text); }
+.chips select { width: auto; min-width: 190px; padding-top: 6px; padding-bottom: 6px; font-size: .85rem; }
+.chips .note { font-size: .8rem; color: var(--muted); }
+
+/* Stat tiles (trend view) */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.stat { padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px; }
+.stat-label { font-size: .78rem; color: var(--muted); font-weight: 500; }
+.stat-value { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.stat-sub { font-size: .75rem; color: var(--muted); }
+
+/* Category cards (overview) */
+.headline { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; margin: 0 2px 16px; }
+.headline span { color: var(--muted); font-weight: 500; font-size: 1rem; letter-spacing: 0; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.cat-card { padding: 18px 20px 14px; cursor: pointer; transition: border-color .15s, transform .15s; }
+.cat-card:hover { border-color: var(--cat); }
+.cat-card:focus-visible { outline: none; border-color: var(--cat); box-shadow: 0 0 0 3px var(--accent-soft); }
+.cat-head { display: flex; align-items: center; gap: 10px; }
+.cat-head .swatch { width: 12px; height: 12px; border-radius: 3px; background: var(--cat); flex-shrink: 0; }
+.cat-head h3 { font-size: 1.05rem; font-weight: 700; }
+.cat-nums { display: flex; justify-content: space-between; align-items: flex-end; margin: 8px 0 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.big { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.unit { font-size: .8rem; color: var(--muted); }
+.share { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cat-list { display: grid; gap: 7px; }
+.row { display: grid; grid-template-columns: 54px minmax(0, 1fr) 84px 52px; align-items: center; gap: 8px; font-size: .85rem; }
+.row .code { font-weight: 700; }
+.row .desc { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.bar { display: block; height: 10px; border-radius: 4px; background: transparent; }
+.bar i { display: block; height: 100%; min-width: 2px; border-radius: 0 4px 4px 0; background: var(--cat, var(--s1)); }
+.card-hint { margin-top: 10px; font-size: .75rem; color: var(--muted); }
+
+/* Top countries */
+.rank-list { display: grid; gap: 6px; }
+.rank-row { display: grid; grid-template-columns: 28px 190px minmax(0, 1fr) 76px 54px; align-items: center; gap: 10px; padding: 3px 4px; border-radius: 6px; font-size: .9rem; }
+.rank-row:hover { background: var(--bg); }
+.rank-row .rk { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.rank-row .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-row .bar { height: 16px; }
+.rank-row .val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rank-row .pc { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rank-head { color: var(--muted); font-size: .75rem; font-weight: 600; }
+.rank-head:hover { background: transparent; }
+
+/* Heatmap */
+.heat-scroll { overflow-x: auto; }
+.heat-grid { display: grid; grid-template-columns: 46px repeat(12, minmax(0, 1fr)) 64px; gap: 2px; min-width: 560px; }
+.hh { font-size: .75rem; color: var(--muted); font-weight: 600; text-align: center; padding-bottom: 4px; }
+.hy { font-size: .8rem; font-weight: 600; display: flex; align-items: center; }
+.hs { font-size: .78rem; color: var(--muted); display: flex; align-items: center; justify-content: flex-end; font-variant-numeric: tabular-nums; padding-left: 6px; }
+.hc { min-height: 36px; border-radius: 4px; display: grid; place-items: center; font-size: .72rem; font-weight: 600; font-variant-numeric: tabular-nums; cursor: default; }
+.hc.na { background: repeating-linear-gradient(135deg, transparent 0 4px, var(--grid) 4px 5px); }
+.hc:hover { outline: 2px solid var(--text); outline-offset: -2px; }
+.ramp { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: .78rem; color: var(--muted); }
+.ramp .grad { width: 180px; height: 10px; border-radius: 5px; background: linear-gradient(90deg, var(--ramp-lo), var(--ramp-hi)); border: 1px solid var(--border); }
+
+.tip {
+  position: fixed; z-index: 30; pointer-events: none; padding: 8px 10px; border-radius: 8px;
+  background: #0f172a; color: #fff; font-size: .8rem; line-height: 1.35; max-width: 240px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.3);
+}
+.tip b { font-weight: 700; }
+
+/* Table view */
+.table-wrap { max-height: 460px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+th, td { padding: 8px 12px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--border); }
+th { position: sticky; top: 0; background: var(--surface); font-weight: 600; color: var(--muted); z-index: 1; }
+td.num, th.num { text-align: right; }
+
 .state { padding: 48px 24px; text-align: center; color: var(--muted); }
 .spinner {
   width: 28px; height: 28px; margin: 0 auto 14px;
@@ -123,7 +229,7 @@ select:focus-visible, a:focus-visible {
   border-radius: 50%; animation: spin .8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } .cat-card { transition: none; } }
 .progress { height: 4px; max-width: 280px; margin: 14px auto 0; background: var(--border); border-radius: 2px; overflow: hidden; }
 .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 
@@ -137,12 +243,26 @@ select:focus-visible, a:focus-visible {
 
 footer { margin-top: 28px; font-size: .82rem; color: var(--muted); }
 footer a { color: var(--accent); word-break: break-all; }
+footer details { margin-top: 10px; }
+footer summary { cursor: pointer; font-weight: 600; }
+footer dl { margin-top: 8px; display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; }
+footer dt { font-weight: 600; color: var(--text); }
 .hidden { display: none !important; }
 
+@media (max-width: 760px) {
+  .rank-row { grid-template-columns: 24px 120px minmax(0, 1fr) 64px; }
+  .rank-row .pc { display: none; }
+}
 @media (max-width: 640px) {
   .wrap { padding: 28px 16px 48px; }
   .chart-panel { padding: 16px; }
+  .chart-panel.bare { padding: 0; }
   .chart-box { height: 320px; }
+  .chart-head { flex-direction: column; }
+  .cards { grid-template-columns: 1fr; }
+  .headline { font-size: 1.25rem; }
+  .hc { font-size: 0; min-height: 30px; }
+  .heat-grid { grid-template-columns: 40px repeat(12, minmax(0, 1fr)) 52px; min-width: 0; }
 }
 </style>
 </head>
@@ -150,7 +270,7 @@ footer a { color: var(--accent); word-break: break-all; }
 <div class="wrap">
   <header>
     <h1>US Non-Immigrant Visa Issuance</h1>
-    <p class="subtitle">Monthly visas issued by nationality and visa class, from US Department of State data.</p>
+    <p class="subtitle">Monthly visas issued by nationality and visa class, from US Department of State data. Explore it six different ways.</p>
   </header>
 
   <div id="loading" class="panel state" role="status">
@@ -160,51 +280,140 @@ footer a { color: var(--accent); word-break: break-all; }
   </div>
   <div id="error" class="error hidden" role="alert"></div>
 
-  <section id="controls" class="panel controls hidden">
-    <div class="field">
-      <label for="country">Country</label>
-      <select id="country"><option value="">Select a country</option></select>
-    </div>
-    <div class="field">
-      <label for="visa">Visa type</label>
-      <select id="visa"><option value="">Select a visa type</option></select>
-    </div>
-  </section>
+  <main id="app" class="hidden">
+    <div class="tabs" id="tabs" role="tablist" aria-label="Ways to explore the data"></div>
+    <p class="view-help" id="viewHelp"></p>
 
-  <div id="empty" class="panel state hidden">Select a country and a visa type to see monthly issuance.</div>
-
-  <section id="statsContainer" class="stats hidden"></section>
-
-  <section id="chartContainer" class="panel chart-panel hidden">
-    <div class="chart-head">
-      <div>
-        <div class="chart-title" id="chartTitle"></div>
-        <div class="chart-sub" id="chartSub"></div>
+    <section id="controls" class="panel controls">
+      <div class="field" data-field="country">
+        <label for="country">Country</label>
+        <select id="country"></select>
       </div>
-      <button type="button" id="exportBtn" class="btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
-        Export CSV
-      </button>
-    </div>
-    <div class="chart-box"><canvas id="visaChart"></canvas></div>
-  </section>
+      <div class="field" data-field="metric">
+        <label for="metric">Visa type</label>
+        <select id="metric"></select>
+      </div>
+      <div class="field" data-field="period">
+        <label for="period">Period</label>
+        <select id="period"></select>
+      </div>
+      <div class="field" data-field="topn">
+        <label for="topn">Show</label>
+        <select id="topn">
+          <option value="10">Top 10</option>
+          <option value="15" selected>Top 15</option>
+          <option value="25">Top 25</option>
+          <option value="50">Top 50</option>
+        </select>
+      </div>
+    </section>
 
-  <footer id="info" class="hidden">
-    Source: US Department of State, <a href="https://travel.state.gov/content/travel/en/legal/visa-law0/visa-statistics/nonimmigrant-visa-statistics/monthly-nonimmigrant-visa-issuances.html" target="_blank" rel="noopener noreferrer">Monthly Nonimmigrant Visa Issuances</a>. All processing happens in your browser.
-  </footer>
+    <section id="vizPanel" class="panel chart-panel">
+      <div class="chart-head">
+        <div>
+          <div class="chart-title" id="chartTitle"></div>
+          <div class="chart-sub" id="chartSub"></div>
+        </div>
+        <div class="btn-group">
+          <button type="button" id="tableBtn" class="btn" aria-pressed="false">Show table</button>
+          <button type="button" id="exportBtn" class="btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+            Export CSV
+          </button>
+        </div>
+      </div>
+      <div id="toolbar" class="toolbar"></div>
+      <div id="extra"></div>
+      <div id="statsContainer" class="stats hidden"></div>
+      <div id="chartBox" class="chart-box hidden"><canvas id="visaChart"></canvas></div>
+      <div id="htmlBox" class="hidden"></div>
+      <div id="tableBox" class="table-wrap hidden"></div>
+      <div id="emptyMsg" class="state hidden"></div>
+    </section>
+
+    <footer id="info">
+      Source: US Department of State, <a href="https://travel.state.gov/content/travel/en/legal/visa-law0/visa-statistics/nonimmigrant-visa-statistics/monthly-nonimmigrant-visa-issuances.html" target="_blank" rel="noopener noreferrer">Monthly Nonimmigrant Visa Issuances</a>. All processing happens in your browser. Counts are visas issued (stamps), not unique people.
+      <details>
+        <summary>How visa classes are grouped into categories</summary>
+        <dl id="catDefs"></dl>
+      </details>
+    </footer>
+  </main>
 </div>
+<div id="tip" class="tip hidden" role="tooltip"></div>
 
 <script>
-const dataIndex = new Map();
-let countries = [];
-let visaTypes = [];
-let chart = null;
-let current = null;
+'use strict';
 
+/* ---------- constants ---------- */
 const DATA_URL = 'https://raw.githubusercontent.com/jobsnowpaper/visatrends/refs/heads/main/data/monthly_nonimmigrant_visa_issuance_statistics.csv';
 const WORLDWIDE = '__worldwide__';
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTH_IDX = Object.fromEntries(MONTHS.map((m, i) => [m, i]));
 const $ = id => document.getElementById(id);
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+
+// Six categories used throughout. Anything not listed falls into the last one.
+const CATS = [
+  { name: 'Visitors', codes: ['B1/B2','B1','B2','BBBCC','BBBCV'] },
+  { name: 'Temporary Workers', codes: ['H1B','L1','O1','O2','P1','P2','P3','E1','E2','E2C','E3','E3R','TN','H3','H2A','H2B','H1C','H1B1','R1','I','Q1'] },
+  { name: 'Dependents', codes: ['H4','L2','F2','J2','O3','P4','M2','R2','E3D','TD'] },
+  { name: 'Students & Exchange', codes: ['F1','M1','J1'] },
+  { name: 'Crew & Transit', codes: ['C1/D','C2','C3','C4/D3','C4','D3','D'] },
+  { name: 'Diplomats & Other', codes: [] }
+];
+const OTHER = CATS.length - 1;
+const classCat = new Map();
+CATS.forEach((c, i) => c.codes.forEach(k => classCat.set(k, i)));
+const catOf = cls => classCat.has(cls) ? classCat.get(cls) : OTHER;
+
+// Plain-English names for visa classes (only where the meaning is well established)
+const VISA_INFO = {
+  'A1':'Diplomats','A2':'Govt. officials','A3':'Staff of A-1/A-2','B1':'Business','B2':'Tourist','B1/B2':'Tourist & business',
+  'BBBCC':'Border crossing card','BBBCV':'Visa + border card','C1':'Transit','C1/D':'Transit & crew','C2':'UN transit','C3':'Govt. transit',
+  'CW1':'N. Mariana workers','CW2':'CW-1 family','D':'Crew member','E1':'Treaty traders','E2':'Treaty investors','E2C':'N. Mariana investors',
+  'E3':'Australian professionals','E3D':'E-3 family','F1':'Students','F2':'Student family','G1':'Intl. org. reps','G2':'Intl. org. reps',
+  'G3':'Intl. org. reps','G4':'Intl. org. staff','G5':'Staff of G-1 to G-4','H1B':'Specialty jobs','H1B1':'Chile/Singapore professionals',
+  'H1C':'Nurses','H2A':'Seasonal farm work','H2B':'Seasonal non-farm','H3':'Trainees','H4':'H-1B family','I':'Journalists','J1':'Exchange visitors',
+  'J2':'Exchange family','K1':'Fiancé(e)','K2':'Fiancé(e) child','K3':'Spouse of US citizen','K4':'Child of K-3','L1':'Company transfer',
+  'L2':'L-1 family','M1':'Vocational students','M2':'Vocational family','O1':'Extraordinary ability','O2':'O-1 support staff','O3':'O-1 family',
+  'P1':'Athletes & groups','P2':'Exchange performers','P3':'Cultural artists','P4':'P-visa family','Q1':'Cultural exchange','R1':'Religious workers',
+  'R2':'Religious family','TD':'TN family','TN':'USMCA professionals','T2':'Trafficking victims','T3':'Trafficking victims','T4':'Trafficking victims',
+  'T5':'Trafficking victims','T6':'Trafficking victims','U1':'Crime victims','U2':'Crime victims','U3':'Crime victims','U4':'Crime victims','U5':'Crime victims'
+};
+const dispCode = code => code.split('/').map(p => p.replace(/^([A-Z]+)(\d.*)$/, '$1-$2')).join('/');
+
+/* ---------- formatting ---------- */
+const nf = new Intl.NumberFormat('en-US');
+const fmt = n => {
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e4) return Math.round(n / 1e3) + 'K';
+  if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
+  return String(Math.round(n));
+};
+const pct = p => (p >= 10 ? Math.round(p) : p.toFixed(1)) + '%';
+
+/* ---------- data store ---------- */
+let T0 = 0, N = 0;               // first month index and number of months
+let countries = [];              // display names, sorted
+let allClasses = [];
+const data = new Map();          // country key -> Map(visaClass -> Float64Array(N))
+const displayName = new Map();   // country key -> display name
+const raw = new Map();           // parse-time staging
+const rawNames = new Map();      // raw spelling -> row count
+const keyOfName = new Map();
+let minT = Infinity, maxT = -Infinity;
+
+function countryKey(name) {
+  let k = keyOfName.get(name);
+  if (k === undefined) {
+    // Same country appears under several spellings (spacing, capitalisation, dashes)
+    k = String(name).replace(/\s+/g, ' ').trim().toLowerCase().replace(/\s*-\s*/g, '-');
+    keyOfName.set(name, k);
+  }
+  return k;
+}
 
 async function loadData() {
   try {
@@ -223,7 +432,7 @@ async function loadData() {
       received += value.length;
       csvText += decoder.decode(value, { stream: true });
       if (total) {
-        const p = Math.round((received / total) * 100);
+        const p = Math.min(100, Math.round((received / total) * 100));
         $('loadingText').textContent = p + '%';
         $('loadingProgress').style.width = p + '%';
       }
@@ -244,15 +453,31 @@ async function loadData() {
 }
 
 function processRow(row) {
-  const country = row.Nationality;
+  const nationality = row.Nationality;
   const visaClass = row['Visa Class'];
   const monthYear = row['Month-Year'];
-  const issuances = row.Issuances || 0;
-  if (!country || !visaClass || !monthYear) return;
+  if (nationality == null || visaClass == null || !monthYear) return;
+  const name = String(nationality);
+  const cls = String(visaClass).trim();
+  // The file includes its own "GRAND TOTAL" / "Grand ... Total" rows; counting them would double the totals
+  if (/^grand\b/i.test(name.trim()) || cls === '' || /^total$/i.test(cls)) return;
 
-  const key = `${country}|${visaClass}`;
-  if (!dataIndex.has(key)) dataIndex.set(key, []);
-  dataIndex.get(key).push({ date: monthYear, value: issuances });
+  const my = String(monthYear);
+  const m = MONTH_IDX[my.slice(0, 3)];
+  const y = parseInt(my.slice(4), 10);
+  if (m === undefined || isNaN(y)) return;
+  const t = (2000 + y) * 12 + m;
+  if (t < minT) minT = t;
+  if (t > maxT) maxT = t;
+
+  const key = countryKey(name);
+  rawNames.set(name, (rawNames.get(name) || 0) + 1);
+  let cm = raw.get(key);
+  if (!cm) { cm = new Map(); raw.set(key, cm); }
+  let e = cm.get(cls);
+  if (!e) { e = { t: [], v: [] }; cm.set(cls, e); }
+  e.t.push(t);
+  e.v.push(Number(row.Issuances) || 0);
 }
 
 function showError(message) {
@@ -261,212 +486,624 @@ function showError(message) {
   $('error').classList.remove('hidden');
 }
 
-function initializeApp() {
-  $('loading').classList.add('hidden');
-  $('controls').classList.remove('hidden');
-  $('empty').classList.remove('hidden');
-  $('info').classList.remove('hidden');
+function buildStore() {
+  T0 = minT; N = maxT - minT + 1;
+  const world = new Map();
+  const classes = new Set();
 
-  const cs = new Set(), vs = new Set();
-  for (const key of dataIndex.keys()) {
-    const [country, visa] = key.split('|');
-    cs.add(country);
-    vs.add(visa);
+  // Pick the most common spelling of each country as its display name
+  const best = new Map();
+  for (const [name, count] of rawNames) {
+    const k = countryKey(name);
+    const spelled = name.replace(/\s+/g, ' ').trim();
+    const cur = best.get(k);
+    if (!cur || count > cur.count) best.set(k, { spelled, count });
   }
-  countries = Array.from(cs).sort();
-  visaTypes = Array.from(vs).sort();
 
-  buildWorldwide();
+  for (const [key, cm] of raw) {
+    const out = new Map();
+    for (const [cls, e] of cm) {
+      const a = new Float64Array(N);
+      for (let i = 0; i < e.t.length; i++) a[e.t[i] - T0] += e.v[i];
+      out.set(cls, a);
+      classes.add(cls);
+      let w = world.get(cls);
+      if (!w) { w = new Float64Array(N); world.set(cls, w); }
+      for (let i = 0; i < N; i++) w[i] += a[i];
+    }
+    data.set(key, out);
+    displayName.set(key, best.get(key).spelled);
+  }
+  data.set(WORLDWIDE, world);
+  raw.clear(); rawNames.clear();
 
-  const countrySelect = $('country');
-  const ww = document.createElement('option');
-  ww.value = WORLDWIDE;
-  ww.textContent = 'Worldwide';
-  countrySelect.appendChild(ww);
-  fillSelect(countrySelect, countries);
-  countrySelect.value = WORLDWIDE;
-
-  fillSelect($('visa'), visaTypes);
-  countrySelect.addEventListener('change', updateVisualization);
-  $('visa').addEventListener('change', updateVisualization);
-  updateVisualization();
+  countries = Array.from(displayName.keys())
+    .sort((a, b) => {
+      const A = displayName.get(a), B = displayName.get(b);
+      const sa = A.startsWith('*') ? 1 : 0, sb = B.startsWith('*') ? 1 : 0;
+      return sa - sb || A.localeCompare(B);
+    });
+  allClasses = Array.from(classes).sort();
 }
 
-// Sum issuances across all countries for each visa type and month
-function buildWorldwide() {
-  const totals = new Map();
-  for (const [key, rows] of dataIndex) {
-    const visa = key.split('|')[1];
-    if (!totals.has(visa)) totals.set(visa, new Map());
-    const months = totals.get(visa);
-    rows.forEach(r => months.set(r.date, (months.get(r.date) || 0) + r.value));
+const nameOf = key => key === WORLDWIDE ? 'Worldwide' : displayName.get(key);
+const monthLabel = i => { const t = T0 + i; return `${MONTHS[t % 12]} ${Math.floor(t / 12)}`; };
+
+/* ---------- series helpers ---------- */
+const seriesCache = new Map();
+function metricSeries(country, metric) {
+  const ck = country + '|' + metric;
+  let a = seriesCache.get(ck);
+  if (a) return a;
+  a = new Float64Array(N);
+  const cm = data.get(country);
+  if (cm) {
+    const [kind, arg] = metric === 'all' ? ['all', ''] : metric.split(/:(.*)/s);
+    for (const [cls, arr] of cm) {
+      if (kind === 'class' && cls !== arg) continue;
+      if (kind === 'cat' && catOf(cls) !== +arg) continue;
+      for (let i = 0; i < N; i++) a[i] += arr[i];
+    }
   }
-  for (const [visa, months] of totals) {
-    dataIndex.set(`${WORLDWIDE}|${visa}`,
-      Array.from(months, ([date, value]) => ({ date, value })));
+  seriesCache.set(ck, a);
+  return a;
+}
+const sum = (a, i0 = 0, i1 = a.length - 1) => { let s = 0; for (let i = i0; i <= i1; i++) s += a[i]; return s; };
+function trailingAvg(a, w = 12) {
+  const out = new Array(a.length).fill(null);
+  let s = 0;
+  for (let i = 0; i < a.length; i++) {
+    s += a[i];
+    if (i >= w) s -= a[i - w];
+    if (i >= w - 1) out[i] = s / w;
   }
+  return out;
 }
 
-function fillSelect(select, items) {
-  const frag = document.createDocumentFragment();
-  items.forEach(item => {
-    const opt = document.createElement('option');
-    opt.value = item;
-    opt.textContent = item;
-    frag.appendChild(opt);
-  });
-  select.appendChild(frag);
+function metricLabel(metric) {
+  if (metric === 'all') return 'All visa types';
+  const [kind, arg] = metric.split(/:(.*)/s);
+  if (kind === 'cat') return CATS[+arg].name;
+  const info = VISA_INFO[arg];
+  return dispCode(arg) + (info ? ` (${info.toLowerCase()})` : '');
 }
+const metricNoun = metric => metric === 'all' ? 'Visas' : metric.startsWith('cat:') ? `${metricLabel(metric)} visas` : `${dispCode(metric.slice(6))} visas`;
 
-function hideResults() {
-  $('chartContainer').classList.add('hidden');
+/* ---------- periods ---------- */
+let periods = [];
+function buildPeriods() {
+  periods = [{ value: 'all', label: `All time (${monthLabel(0)} – ${monthLabel(N - 1)})`, i0: 0, i1: N - 1, text: `${monthLabel(0)} – ${monthLabel(N - 1)}` }];
+  const y0 = Math.floor(T0 / 12), y1 = Math.floor((T0 + N - 1) / 12);
+  for (let y = y0; y <= y1; y++) {
+    const i0 = Math.max(y * 12 - T0, 0), i1 = Math.min(y * 12 + 11 - T0, N - 1);
+    if (i0 > i1) continue;
+    const partial = i1 - i0 + 1 < 12;
+    const span = partial ? ` (${MONTHS[(T0 + i0) % 12]}–${MONTHS[(T0 + i1) % 12]})` : '';
+    periods.push({ value: String(y), label: `${y}${span}`, i0, i1, text: `${y}${span}` });
+  }
+}
+const currentPeriod = () => periods.find(p => p.value === state.period) || periods[0];
+
+/* ---------- state ---------- */
+const state = {
+  view: 'overview',
+  country: WORLDWIDE,
+  metric: 'all',
+  period: 'all',
+  topn: 15,
+  scale: 'abs',        // share-over-time and compare: 'abs' | 'share' | 'index'
+  measure: 'monthly',  // compare: 'monthly' | 'avg'
+  heat: 'all',         // heatmap colour scale: 'all' | 'row'
+  compare: [],         // [{ key, slot }]
+  showTable: false
+};
+let chart = null;
+let current = null;    // { title, sub, head, rows, slug }
+
+/* ---------- shared UI helpers ---------- */
+const tipEl = $('tip');
+function showTip(html, x, y) {
+  tipEl.innerHTML = html;
+  tipEl.classList.remove('hidden');
+  const r = tipEl.getBoundingClientRect();
+  const left = Math.min(Math.max(8, x + 14), window.innerWidth - r.width - 8);
+  const top = y + 18 + r.height > window.innerHeight ? y - r.height - 12 : y + 18;
+  tipEl.style.left = left + 'px';
+  tipEl.style.top = top + 'px';
+}
+const hideTip = () => tipEl.classList.add('hidden');
+
+function setEmpty(msg) {
+  $('emptyMsg').textContent = msg;
+  $('emptyMsg').classList.remove('hidden');
+  $('chartBox').classList.add('hidden');
+  $('htmlBox').classList.add('hidden');
   $('statsContainer').classList.add('hidden');
 }
 
-function updateVisualization() {
-  const country = $('country').value;
-  const visaType = $('visa').value;
+function destroyChart() { if (chart) { chart.destroy(); chart = null; } }
 
-  if (!country || !visaType) {
-    hideResults();
-    $('error').classList.add('hidden');
-    $('empty').classList.remove('hidden');
-    return;
-  }
-
-  const data = dataIndex.get(`${country}|${visaType}`);
-  if (!data || data.length === 0) {
-    hideResults();
-    $('empty').classList.add('hidden');
-    $('error').textContent = 'No data available for this combination.';
-    $('error').classList.remove('hidden');
-    return;
-  }
-
-  $('error').classList.add('hidden');
-  $('empty').classList.add('hidden');
-  data.sort((a, b) => parseDate(a.date) - parseDate(b.date));
-  current = { data, country, visaType };
-  displayChart(data, country, visaType);
-  displayStats(data);
+function setupChartDefaults() {
+  Chart.defaults.font.family = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+  Chart.defaults.color = css('--muted');
 }
 
-function parseDate(str) {
-  const [month, year] = str.split('-');
-  const months = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
-  return new Date(2000 + parseInt(year), months[month], 1);
+const baseOptions = () => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  interaction: { mode: 'index', intersect: false },
+  plugins: {
+    legend: { display: false },
+    tooltip: { backgroundColor: '#0f172a', padding: 10, cornerRadius: 8, displayColors: true, boxPadding: 4 }
+  },
+  scales: {
+    x: { grid: { display: false }, ticks: { color: css('--muted'), font: { size: 10 }, maxRotation: 45, minRotation: 45, autoSkip: true, maxTicksLimit: 24 } },
+    y: { beginAtZero: true, grid: { color: css('--grid') }, border: { display: false }, ticks: { color: css('--muted'), font: { size: 11 }, callback: v => fmt(v) } }
+  }
+});
+const legendOptions = () => ({ display: true, position: 'top', align: 'end', labels: { color: css('--text'), usePointStyle: true, boxWidth: 8, boxHeight: 8, font: { size: 12 } } });
+const yTitle = text => ({ display: true, text, color: css('--muted'), font: { size: 12, weight: '500' } });
+
+// Draws "● Name" at the end of each line, nudged apart so labels never overlap
+const endLabels = {
+  id: 'endLabels',
+  afterDatasetsDraw(c, args, opts) {
+    if (!opts || !opts.enabled) return;
+    const { ctx } = c;
+    const items = [];
+    c.data.datasets.forEach((ds, i) => {
+      const meta = c.getDatasetMeta(i);
+      for (let k = ds.data.length - 1; k >= 0; k--) {
+        if (ds.data[k] != null && !Number.isNaN(ds.data[k])) {
+          const p = meta.data[k];
+          items.push({ x: p.x, y: p.y, text: ds.label, color: ds.borderColor });
+          break;
+        }
+      }
+    });
+    items.sort((a, b) => a.y - b.y);
+    let last = -1e9;
+    items.forEach(it => { it.ly = Math.max(it.y, last + 15); last = it.ly; });
+    ctx.save();
+    ctx.font = "600 12px 'Inter', sans-serif";
+    ctx.textBaseline = 'middle';
+    items.forEach(it => {
+      ctx.fillStyle = it.color;
+      ctx.beginPath(); ctx.arc(it.x + 1, it.y, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = opts.color;
+      const t = it.text.length > 16 ? it.text.slice(0, 15) + '…' : it.text;
+      ctx.fillText(t, it.x + 10, it.ly);
+    });
+    ctx.restore();
+  }
+};
+
+/* ---------- VIEW 1: overview (category cards) ---------- */
+function viewOverview() {
+  const p = currentPeriod();
+  const cm = data.get(state.country);
+  const catTot = CATS.map(() => 0);
+  const byCat = CATS.map(() => []);
+  let total = 0;
+  for (const [cls, arr] of cm) {
+    const s = sum(arr, p.i0, p.i1);
+    if (s <= 0) continue;
+    const c = catOf(cls);
+    catTot[c] += s; total += s; byCat[c].push([cls, s]);
+  }
+  const who = state.country === WORLDWIDE ? 'worldwide' : `to ${nameOf(state.country)}`;
+  const out = { title: `Visas issued ${who}`, sub: p.text, head: ['Category', 'Visa class', 'Description', 'Issuances', 'Share of total'], rows: [], slug: 'overview' };
+  if (total <= 0) { setEmpty('No visas were issued for this selection in the chosen period.'); return out; }
+
+  const order = CATS.map((_, i) => i).filter(i => catTot[i] > 0).sort((a, b) => catTot[b] - catTot[a]);
+  let html = `<div class="headline">${fmt(total)} <span>visas issued ${esc(who)} · ${esc(p.text)}</span></div><div class="cards">`;
+  for (const i of order) {
+    const list = byCat[i].sort((a, b) => b[1] - a[1]);
+    const top = list.slice(0, 5);
+    const mx = top[0][1];
+    html += `<div class="panel cat-card" style="--cat:var(--s${i + 1})" role="button" tabindex="0" data-cat="${i}" aria-label="${esc(CATS[i].name)}: ${nf.format(catTot[i])} visas. Open monthly trend.">
+      <div class="cat-head"><span class="swatch"></span><h3>${esc(CATS[i].name)}</h3></div>
+      <div class="cat-nums"><div><div class="big">${fmt(catTot[i])}</div><div class="unit">visas</div></div><div class="share">${pct(catTot[i] / total * 100)}</div></div>
+      <div class="cat-list">${top.map(([cls, v]) => `<div class="row">
+        <span class="code">${esc(dispCode(cls))}</span><span class="desc">${esc(VISA_INFO[cls] || '')}</span>
+        <span class="bar"><i style="width:${Math.max(2, v / mx * 100)}%"></i></span><span class="val">${fmt(v)}</span></div>`).join('')}</div>
+      <div class="card-hint">Click for monthly trend →</div>
+    </div>`;
+    list.forEach(([cls, v]) => out.rows.push([CATS[i].name, dispCode(cls), VISA_INFO[cls] || '', Math.round(v), +(v / total * 100).toFixed(2)]));
+  }
+  html += '</div>';
+  const box = $('htmlBox');
+  box.innerHTML = html;
+  box.classList.remove('hidden');
+  return out;
 }
 
-function displayChart(data, country, visaType) {
-  $('chartContainer').classList.remove('hidden');
-  $('chartTitle').textContent = country === WORLDWIDE
-    ? `${visaType} visas issued worldwide`
-    : `${visaType} visas issued to ${country}`;
-  $('chartSub').textContent = `${data[0].date} to ${data[data.length - 1].date}`;
+/* ---------- VIEW 2: monthly trend ---------- */
+function viewTrend() {
+  const a = metricSeries(state.country, state.metric);
+  const who = state.country === WORLDWIDE ? 'worldwide' : `to ${nameOf(state.country)}`;
+  const out = { title: `${metricNoun(state.metric)} issued ${who}`, sub: `${monthLabel(0)} to ${monthLabel(N - 1)}`, head: ['Month', 'Issuances', '12-month average'], rows: [], slug: 'trend' };
+  const total = sum(a);
+  if (total <= 0) { setEmpty('No data available for this combination.'); return out; }
 
-  const barColor = css('--chart-bar');
-  const hoverColor = css('--chart-bar-hover');
-  const mutedColor = css('--muted');
-  const gridColor = css('--grid');
+  const labels = Array.from({ length: N }, (_, i) => monthLabel(i));
+  const avg = trailingAvg(a);
+  labels.forEach((l, i) => out.rows.push([l, a[i], avg[i] == null ? '' : Math.round(avg[i])]));
 
-  if (chart) chart.destroy();
+  const opts = baseOptions();
+  opts.plugins.legend = legendOptions();
+  opts.plugins.tooltip.callbacks = { label: c => `${c.dataset.label}: ${Math.round(c.parsed.y).toLocaleString()}` };
+  opts.scales.y.title = yTitle('Visas issued per month');
+  $('chartBox').classList.remove('hidden');
   chart = new Chart($('visaChart').getContext('2d'), {
     type: 'bar',
     data: {
-      labels: data.map(d => d.date),
-      datasets: [{
-        label: 'Visas issued',
-        data: data.map(d => d.value),
-        backgroundColor: barColor,
-        hoverBackgroundColor: hoverColor,
-        borderRadius: 3,
-        borderSkipped: false,
-        maxBarThickness: 28,
-        categoryPercentage: 0.9,
-        barPercentage: 0.85
-      }]
+      labels,
+      datasets: [
+        { type: 'bar', label: 'Monthly issuances', data: Array.from(a), backgroundColor: css('--s1'), borderRadius: 3, borderSkipped: false, maxBarThickness: 28, categoryPercentage: 0.9, barPercentage: 0.85, order: 2 },
+        { type: 'line', label: '12-month average', data: avg, borderColor: css('--s2'), backgroundColor: css('--s2'), borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.25, order: 1 }
+      ]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: '#0f172a',
-          padding: 10,
-          cornerRadius: 8,
-          displayColors: false,
-          callbacks: {
-            label: ctx => ctx.parsed.y.toLocaleString() + ' visas issued'
-          }
-        }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          grid: { color: gridColor },
-          border: { display: false },
-          ticks: { color: mutedColor, font: { size: 11 }, callback: v => v.toLocaleString() },
-          title: { display: true, text: 'Visas issued', color: mutedColor, font: { size: 12, weight: '500' } }
-        },
-        x: {
-          grid: { display: false },
-          ticks: { color: mutedColor, font: { size: 10 }, maxRotation: 45, minRotation: 45, autoSkip: true, maxTicksLimit: 24 }
-        }
-      }
-    }
+    options: opts
   });
+
+  let pk = 0, lo = 0;
+  for (let i = 1; i < N; i++) { if (a[i] > a[pk]) pk = i; if (a[i] < a[lo]) lo = i; }
+  const items = [
+    ['Total issued', nf.format(total), ''],
+    ['Monthly average', nf.format(Math.round(total / N)), ''],
+    ['Peak month', nf.format(a[pk]), monthLabel(pk)],
+    ['Lowest month', nf.format(a[lo]), monthLabel(lo)],
+    ['Months of data', String(N), '']
+  ];
+  $('statsContainer').innerHTML = items.map(([l, v, s]) =>
+    `<div class="stat"><div class="stat-label">${l}</div><div class="stat-value">${v}</div>${s ? `<div class="stat-sub">${s}</div>` : ''}</div>`).join('');
+  $('statsContainer').classList.remove('hidden');
+  return out;
 }
 
-function displayStats(data) {
-  const values = data.map(d => d.value);
-  const total = values.reduce((s, v) => s + v, 0);
-  const avg = Math.round(total / values.length);
-  const items = [
-    ['Total issued', total.toLocaleString()],
-    ['Monthly average', avg.toLocaleString()],
-    ['Peak month', Math.max(...values).toLocaleString()],
-    ['Lowest month', Math.min(...values).toLocaleString()],
-    ['Months of data', data.length.toLocaleString()]
-  ];
-  $('statsContainer').innerHTML = items.map(([label, value]) =>
-    `<div class="panel stat"><div class="stat-label">${label}</div><div class="stat-value">${value}</div></div>`
-  ).join('');
-  $('statsContainer').classList.remove('hidden');
+/* ---------- VIEW 3: share over time (stacked area) ---------- */
+function viewMix() {
+  const cats = CATS.map((_, i) => metricSeries(state.country, 'cat:' + i));
+  const totals = new Float64Array(N);
+  cats.forEach(a => { for (let i = 0; i < N; i++) totals[i] += a[i]; });
+  const who = state.country === WORLDWIDE ? 'worldwide' : `to ${nameOf(state.country)}`;
+  const share = state.scale === 'share';
+  const out = { title: share ? `Category mix of visas issued ${who}` : `Visas issued ${who}, by category`, sub: share ? 'Share of each month’s total' : 'Monthly issuances, stacked', head: ['Month', ...CATS.map(c => c.name), 'Total'], rows: [], slug: 'mix' };
+  if (sum(totals) <= 0) { setEmpty('No visas were issued for this selection.'); return out; }
+
+  const labels = Array.from({ length: N }, (_, i) => monthLabel(i));
+  labels.forEach((l, i) => out.rows.push([l, ...cats.map(a => a[i]), totals[i]]));
+
+  const order = CATS.map((_, i) => i);
+  const surface = css('--surface');
+  const datasets = order.map((ci, k) => ({
+    label: CATS[ci].name,
+    data: Array.from(cats[ci], (v, i) => share ? (totals[i] ? v / totals[i] * 100 : 0) : v),
+    borderColor: surface, backgroundColor: css(`--s${ci + 1}`), borderWidth: 1.5,
+    fill: k === 0 ? 'origin' : '-1', pointRadius: 0, pointHoverRadius: 4, tension: 0.2
+  }));
+  const opts = baseOptions();
+  opts.plugins.legend = legendOptions();
+  opts.scales.y.stacked = true;
+  opts.scales.y.title = yTitle(share ? 'Share of monthly visas' : 'Visas issued per month');
+  if (share) { opts.scales.y.max = 100; opts.scales.y.ticks.callback = v => v + '%'; }
+  opts.plugins.tooltip.callbacks = {
+    label: c => share ? `${c.dataset.label}: ${c.parsed.y.toFixed(1)}%` : `${c.dataset.label}: ${Math.round(c.raw).toLocaleString()}`,
+    footer: items => share ? '' : 'Total: ' + Math.round(totals[items[0].dataIndex]).toLocaleString()
+  };
+  $('chartBox').classList.remove('hidden');
+  chart = new Chart($('visaChart').getContext('2d'), { type: 'line', data: { labels, datasets }, options: opts });
+  return out;
+}
+
+/* ---------- VIEW 4: compare countries ---------- */
+function ensureCompareDefaults() {
+  if (state.compare.length) return;
+  const find = re => countries.find(k => re.test(displayName.get(k)));
+  [/^india$/i, /^china-?\s*mainland/i, /^mexico$/i].forEach(re => {
+    const k = find(re);
+    if (k) addCompare(k);
+  });
+}
+function addCompare(key) {
+  if (state.compare.length >= 5 || state.compare.some(c => c.key === key)) return;
+  const used = new Set(state.compare.map(c => c.slot));
+  let slot = 0; while (used.has(slot)) slot++;          // a country keeps its colour until removed
+  state.compare.push({ key, slot });
+}
+
+function viewCompare() {
+  ensureCompareDefaults();
+  const extra = $('extra');
+  const avail = countries.filter(k => !state.compare.some(c => c.key === k));
+  extra.innerHTML = `<div class="chips" role="group" aria-label="Countries being compared">
+    ${state.compare.map(c => `<span class="chip" style="--c:var(--s${c.slot + 1})"><span class="dot"></span>${esc(nameOf(c.key))}<button type="button" data-remove="${esc(c.key)}" aria-label="Remove ${esc(nameOf(c.key))}">×</button></span>`).join('')}
+    ${state.compare.length < 5 ? `<select id="addCountry" aria-label="Add a country"><option value="">+ Add country…</option>${avail.map(k => `<option value="${esc(k)}">${esc(nameOf(k))}</option>`).join('')}</select>` : '<span class="note">Maximum of 5 countries</span>'}
+  </div>`;
+
+  const out = { title: `${metricNoun(state.metric)} issued, by country`, sub: '', head: ['Month'], rows: [], slug: 'compare' };
+  if (!state.compare.length) { setEmpty('Add a country to start comparing.'); return out; }
+
+  const indexed = state.scale === 'index';
+  const smooth = state.measure === 'avg';
+  out.sub = (smooth ? '12-month average' : 'Monthly') + (indexed ? ' · indexed (first 12 months = 100)' : '');
+  const labels = Array.from({ length: N }, (_, i) => monthLabel(i));
+  const series = state.compare.map(c => {
+    const a = metricSeries(c.key, state.metric);
+    let vals = smooth ? trailingAvg(a) : Array.from(a);
+    if (indexed) {
+      const base = sum(a, 0, Math.min(11, N - 1)) / Math.min(12, N);
+      vals = vals.map(v => (v == null || !base) ? null : v / base * 100);
+    }
+    return { c, vals };
+  });
+  if (series.every(s => s.vals.every(v => v == null || v === 0))) { setEmpty('No visas of this type were issued to the selected countries.'); return out; }
+
+  out.head = ['Month', ...series.map(s => nameOf(s.c.key))];
+  labels.forEach((l, i) => out.rows.push([l, ...series.map(s => s.vals[i] == null ? '' : +s.vals[i].toFixed(indexed ? 1 : 0))]));
+
+  const opts = baseOptions();
+  opts.layout = { padding: { right: 120 } };
+  opts.plugins.legend = { display: false };
+  opts.plugins.endLabels = { enabled: true, color: css('--text') };
+  opts.plugins.tooltip.callbacks = { label: c => `${c.dataset.label}: ${c.parsed.y == null ? '–' : indexed ? c.parsed.y.toFixed(0) : Math.round(c.parsed.y).toLocaleString()}` };
+  opts.scales.y.title = yTitle(indexed ? 'Index (first 12 months = 100)' : smooth ? 'Visas per month (12-month average)' : 'Visas issued per month');
+  if (indexed) opts.scales.y.ticks.callback = v => v.toLocaleString();
+  $('chartBox').classList.remove('hidden');
+  chart = new Chart($('visaChart').getContext('2d'), {
+    type: 'line',
+    plugins: [endLabels],
+    data: { labels, datasets: series.map(s => ({
+      label: nameOf(s.c.key), data: s.vals, borderColor: css(`--s${s.c.slot + 1}`), backgroundColor: css(`--s${s.c.slot + 1}`),
+      borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, pointHoverBorderWidth: 2, pointHoverBorderColor: css('--surface'), tension: 0.2, spanGaps: false
+    })) },
+    options: opts
+  });
+  return out;
+}
+
+/* ---------- VIEW 5: top countries ---------- */
+function viewTop() {
+  const p = currentPeriod();
+  const worldTotal = sum(metricSeries(WORLDWIDE, state.metric), p.i0, p.i1);
+  const ranked = countries.map(k => [k, sum(metricSeries(k, state.metric), p.i0, p.i1)]).filter(r => r[1] > 0).sort((a, b) => b[1] - a[1]);
+  const out = { title: `${metricNoun(state.metric)}: top countries`, sub: `${p.text} · share is of the worldwide total`, head: ['Rank', 'Country', 'Issuances', 'Share of worldwide'], rows: [], slug: 'top' };
+  if (!ranked.length) { setEmpty('No visas of this type were issued in the chosen period.'); return out; }
+  ranked.forEach(([k, v], i) => out.rows.push([i + 1, nameOf(k), Math.round(v), +(v / worldTotal * 100).toFixed(2)]));
+
+  const shown = ranked.slice(0, state.topn);
+  const mx = shown[0][1];
+  $('htmlBox').innerHTML = `<div class="rank-list" style="--cat:var(--s1)">
+    <div class="rank-row rank-head"><span></span><span>Country</span><span></span><span style="text-align:right">Visas</span><span style="text-align:right">Share</span></div>
+    ${shown.map(([k, v], i) => `<div class="rank-row"><span class="rk">${i + 1}</span><span class="nm" title="${esc(nameOf(k))}">${esc(nameOf(k))}</span>
+      <span class="bar"><i style="width:${Math.max(0.5, v / mx * 100)}%"></i></span><span class="val">${fmt(v)}</span><span class="pc">${pct(v / worldTotal * 100)}</span></div>`).join('')}
+  </div>
+  <p class="card-hint" style="margin-top:14px">Showing ${shown.length} of ${ranked.length} countries with issuances. Use “Show table” for the full list.</p>`;
+  $('htmlBox').classList.remove('hidden');
+  return out;
+}
+
+/* ---------- VIEW 6: seasonality heatmap ---------- */
+const hex2rgb = h => { h = h.replace('#', ''); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); };
+const mixRgb = (a, b, t) => a.map((x, i) => Math.round(x + (b[i] - x) * t));
+const luminance = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+
+function viewSeason() {
+  const a = metricSeries(state.country, state.metric);
+  const who = state.country === WORLDWIDE ? 'worldwide' : `to ${nameOf(state.country)}`;
+  const out = { title: `${metricNoun(state.metric)} issued ${who}, by month`, sub: state.heat === 'row' ? 'Colour scaled within each year' : 'Colour scaled across the whole period', head: ['Year', ...MONTHS, 'Year total'], rows: [], slug: 'seasonality' };
+  if (sum(a) <= 0) { setEmpty('No data available for this combination.'); return out; }
+
+  const y0 = Math.floor(T0 / 12), y1 = Math.floor((T0 + N - 1) / 12);
+  const lo = hex2rgb(css('--ramp-lo')), hi = hex2rgb(css('--ramp-hi'));
+  const overall = Math.max(...a);
+  let html = '<div class="heat-scroll"><div class="heat-grid"><span></span>' + MONTHS.map(m => `<span class="hh">${m}</span>`).join('') + '<span class="hh" style="text-align:right">Total</span>';
+  for (let y = y0; y <= y1; y++) {
+    const cells = MONTHS.map((_, m) => { const i = y * 12 + m - T0; return i >= 0 && i < N ? a[i] : null; });
+    const present = cells.filter(v => v != null);
+    const rowMax = Math.max(...present, 0);
+    const scaleMax = state.heat === 'row' ? rowMax : overall;
+    const ytotal = present.reduce((s, v) => s + v, 0);
+    out.rows.push([y, ...cells.map(v => v == null ? '' : v), ytotal]);
+    html += `<span class="hy">${y}</span>`;
+    cells.forEach((v, m) => {
+      if (v == null) { html += '<span class="hc na" aria-hidden="true"></span>'; return; }
+      const t = scaleMax > 0 && v > 0 ? 0.06 + 0.94 * (v / scaleMax) : 0;
+      const rgb = mixRgb(lo, hi, t);
+      const ink = luminance(rgb) > 0.4 ? '#0f172a' : '#ffffff';
+      const label = `${MONTHS[m]} ${y}: ${nf.format(v)} visas`;
+      html += `<span class="hc" data-tip="${esc(`<b>${MONTHS[m]} ${y}</b><br>${nf.format(v)} visas`)}" aria-label="${esc(label)}" style="background:rgb(${rgb});color:${ink}">${v > 0 ? fmt(v) : '–'}</span>`;
+    });
+    html += `<span class="hs">${fmt(ytotal)}</span>`;
+  }
+  html += `</div></div><div class="ramp"><span>Fewer visas</span><span class="grad"></span><span>More visas</span></div>`;
+  $('htmlBox').innerHTML = html;
+  $('htmlBox').classList.remove('hidden');
+  return out;
+}
+
+/* ---------- view registry ---------- */
+const VIEWS = {
+  overview: { name: 'Overview', fields: ['country', 'period'], help: 'Visas grouped into six categories, largest first. Each card shows its biggest visa types. Click a card to see its monthly trend.', render: viewOverview, bare: true },
+  trend: { name: 'Monthly trend', fields: ['country', 'metric'], help: 'Month-by-month issuances for any visa type, with a 12-month average to smooth out seasonality.', render: viewTrend },
+  mix: { name: 'Share over time', fields: ['country'], help: 'How the six categories stack up each month. Switch to share of total to see how the mix shifts.',
+    toolbar: [{ key: 'scale', label: 'Show', options: [['abs', 'Visas'], ['share', 'Share of total']] }], render: viewMix },
+  compare: { name: 'Compare countries', fields: ['metric'], help: 'Plot up to five countries on one chart. Use the index view to compare growth when the volumes are very different.',
+    toolbar: [{ key: 'measure', label: 'Measure', options: [['monthly', 'Monthly'], ['avg', '12-month avg']] }, { key: 'scale', label: 'Scale', options: [['abs', 'Visas'], ['index', 'Indexed']] }], render: viewCompare },
+  top: { name: 'Top countries', fields: ['metric', 'period', 'topn'], help: 'Which nationalities receive the most visas of a given type. Share is measured against the worldwide total for the same period.', render: viewTop },
+  season: { name: 'Seasonality', fields: ['country', 'metric'], help: 'One row per year, one column per month. Darker cells mean more visas. Scale colours within each year to see the seasonal pattern even in low years.',
+    toolbar: [{ key: 'heat', label: 'Colour scale', options: [['all', 'Whole period'], ['row', 'Each year']] }], render: viewSeason }
+};
+
+/* ---------- orchestration ---------- */
+function renderTabs() {
+  $('tabs').innerHTML = Object.entries(VIEWS).map(([id, v]) =>
+    `<button type="button" class="tab" role="tab" id="tab-${id}" data-view="${id}" aria-selected="${id === state.view}" tabindex="${id === state.view ? 0 : -1}">${v.name}</button>`).join('');
+}
+
+function renderToolbar(view) {
+  const tb = view.toolbar || [];
+  $('toolbar').innerHTML = tb.map(t => `<div class="tool"><span class="tool-label">${t.label}</span><div class="seg" role="group" aria-label="${t.label}">
+    ${t.options.map(([v, l]) => `<button type="button" data-key="${t.key}" data-val="${v}" aria-pressed="${state[t.key] === v}">${l}</button>`).join('')}</div></div>`).join('');
+}
+
+function render() {
+  const view = VIEWS[state.view];
+  $('viewHelp').textContent = view.help;
+  document.querySelectorAll('.field').forEach(f => f.classList.toggle('hidden', !view.fields.includes(f.dataset.field)));
+  $('controls').classList.toggle('hidden', !view.fields.length);
+  $('vizPanel').classList.toggle('bare', !!view.bare && !state.showTable);
+  renderToolbar(view);
+  $('extra').innerHTML = '';
+  $('emptyMsg').classList.add('hidden');
+  $('chartBox').classList.add('hidden');
+  $('htmlBox').classList.add('hidden');
+  $('statsContainer').classList.add('hidden');
+  hideTip();
+  destroyChart();
+  setupChartDefaults();
+
+  current = view.render();
+  $('chartTitle').textContent = current.title;
+  $('chartSub').textContent = current.sub;
+
+  const hasData = !$('emptyMsg').classList.contains('hidden') === false && current.rows.length > 0;
+  $('tableBtn').classList.toggle('hidden', !current.rows.length);
+  $('exportBtn').classList.toggle('hidden', !current.rows.length);
+  $('tableBtn').textContent = state.showTable ? 'Show chart' : 'Show table';
+  $('tableBtn').setAttribute('aria-pressed', String(state.showTable));
+  if (state.showTable && current.rows.length) {
+    $('tableBox').innerHTML = tableHTML(current.head, current.rows);
+    $('tableBox').classList.remove('hidden');
+    $('chartBox').classList.add('hidden');
+    $('htmlBox').classList.add('hidden');
+    $('statsContainer').classList.add('hidden');
+    $('vizPanel').classList.remove('bare');
+  } else {
+    $('tableBox').classList.add('hidden');
+  }
+}
+
+function tableHTML(head, rows) {
+  const numeric = head.map((_, c) => rows.some(r => typeof r[c] === 'number'));
+  const cell = v => typeof v === 'number' ? (Number.isInteger(v) ? nf.format(v) : v.toLocaleString('en-US', { maximumFractionDigits: 2 })) : esc(v);
+  return `<table><thead><tr>${head.map((h, c) => `<th class="${numeric[c] ? 'num' : ''}" scope="col">${esc(h)}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r => `<tr>${r.map((v, c) => `<td class="${numeric[c] ? 'num' : ''}">${cell(v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
 }
 
 function csvCell(v) {
   const s = String(v);
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
-
 function exportCSV() {
-  if (!current) return;
-  const { data, country, visaType } = current;
-  const label = country === WORLDWIDE ? 'Worldwide' : country;
-  const rows = [['Nationality', 'Visa Class', 'Month-Year', 'Issuances']]
-    .concat(data.map(d => [label, visaType, d.date, d.value]));
+  if (!current || !current.rows.length) return;
   // BOM keeps accented country names intact when opened in Excel
-  const csv = '\uFEFF' + rows.map(r => r.map(csvCell).join(',')).join('\r\n');
+  const csv = '﻿' + [current.head, ...current.rows].map(r => r.map(csvCell).join(',')).join('\r\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   a.href = url;
-  a.download = `visatrends-${slug(label)}-${slug(visaType)}.csv`;
+  a.download = `visatrends-${current.slug}-${slug(state.view === 'top' || state.view === 'compare' ? state.metric : nameOf(state.country))}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
 }
 
-$('exportBtn').addEventListener('click', exportCSV);
+function setView(id, focus) {
+  state.view = id;
+  renderTabs();
+  if (focus) $('tab-' + id).focus();
+  render();
+}
 
-// Re-draw chart colors when the system theme changes
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-  if (current) displayChart(current.data, current.country, current.visaType);
+/* ---------- init + events ---------- */
+function fillCountrySelect() {
+  const sel = $('country');
+  sel.innerHTML = `<option value="${WORLDWIDE}">Worldwide</option>` + countries.map(k => `<option value="${esc(k)}">${esc(nameOf(k))}</option>`).join('');
+  sel.value = state.country;
+}
+function fillMetricSelect() {
+  const opt = (v, l) => `<option value="${esc(v)}">${esc(l)}</option>`;
+  $('metric').innerHTML = opt('all', 'All visa types') +
+    `<optgroup label="Categories">${CATS.map((c, i) => opt('cat:' + i, c.name)).join('')}</optgroup>` +
+    `<optgroup label="Visa classes">${allClasses.map(k => opt('class:' + k, dispCode(k) + (VISA_INFO[k] ? ' · ' + VISA_INFO[k] : ''))).join('')}</optgroup>`;
+  $('metric').value = state.metric;
+}
+function fillPeriodSelect() {
+  $('period').innerHTML = periods.map(p => `<option value="${p.value}">${esc(p.label)}</option>`).join('');
+  $('period').value = state.period;
+}
+function fillCategoryDefs() {
+  $('catDefs').innerHTML = CATS.map((c, i) => `<dt>${esc(c.name)}</dt><dd>${i === OTHER ? 'Everything else (diplomats, fiancé(e)s, international organizations, NATO, crime and trafficking victims, and other classes)' : esc(c.codes.map(dispCode).join(', '))}</dd>`).join('');
+}
+
+function initializeApp() {
+  if (!keyOfName.size) { showError('The data file contained no usable rows.'); return; }
+  buildStore();
+  buildPeriods();
+  $('loading').classList.add('hidden');
+  $('app').classList.remove('hidden');
+  fillCountrySelect(); fillMetricSelect(); fillPeriodSelect(); fillCategoryDefs();
+  renderTabs();
+  render();
+}
+
+$('country').addEventListener('change', e => { state.country = e.target.value; render(); });
+$('metric').addEventListener('change', e => { state.metric = e.target.value; render(); });
+$('period').addEventListener('change', e => { state.period = e.target.value; render(); });
+$('topn').addEventListener('change', e => { state.topn = +e.target.value; render(); });
+$('exportBtn').addEventListener('click', exportCSV);
+$('tableBtn').addEventListener('click', () => { state.showTable = !state.showTable; render(); if (!state.showTable && chart) chart.resize(); });
+
+$('tabs').addEventListener('click', e => { const b = e.target.closest('.tab'); if (b) setView(b.dataset.view); });
+$('tabs').addEventListener('keydown', e => {
+  const ids = Object.keys(VIEWS), i = ids.indexOf(state.view);
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+    e.preventDefault();
+    setView(ids[(i + (e.key === 'ArrowRight' ? 1 : ids.length - 1)) % ids.length], true);
+  }
 });
+$('toolbar').addEventListener('click', e => {
+  const b = e.target.closest('button[data-key]');
+  if (b) { state[b.dataset.key] = b.dataset.val; render(); }
+});
+$('extra').addEventListener('click', e => {
+  const b = e.target.closest('button[data-remove]');
+  if (b) { state.compare = state.compare.filter(c => c.key !== b.dataset.remove); render(); }
+});
+$('extra').addEventListener('change', e => {
+  if (e.target.id === 'addCountry' && e.target.value) { addCompare(e.target.value); render(); }
+});
+
+// Overview cards open the monthly trend for that category
+function openCard(card) {
+  state.metric = 'cat:' + card.dataset.cat;
+  $('metric').value = state.metric;
+  setView('trend');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+$('htmlBox').addEventListener('click', e => {
+  const card = e.target.closest('.cat-card');
+  if (card) { openCard(card); return; }
+  const cell = e.target.closest('[data-tip]');
+  if (cell) showTip(cell.dataset.tip, e.clientX, e.clientY);       // tap support for touch screens
+});
+$('htmlBox').addEventListener('keydown', e => {
+  const card = e.target.closest('.cat-card');
+  if (card && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openCard(card); }
+});
+$('htmlBox').addEventListener('mousemove', e => {
+  const cell = e.target.closest('[data-tip]');
+  if (cell) showTip(cell.dataset.tip, e.clientX, e.clientY); else hideTip();
+});
+$('htmlBox').addEventListener('mouseleave', hideTip);
+window.addEventListener('scroll', hideTip, { passive: true });
+
+// Re-draw when the system theme changes (chart colours are resolved at draw time)
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (current) render(); });
 
 loadData();
 </script>
