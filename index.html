@@ -593,6 +593,7 @@ const state = {
   topn: 15,
   scale: 'abs',        // share-over-time and compare: 'abs' | 'share' | 'index'
   group: 'cat',        // share-over-time: 'cat' | 'type'
+  mixTypes: null,      // share-over-time by type: null = auto top 6, or array of visa classes
   measure: 'monthly',  // compare: 'monthly' | 'avg'
   heat: 'all',         // heatmap colour scale: 'all' | 'row'
   compare: [],         // [{ key, slot }]
@@ -764,6 +765,20 @@ function viewTrend() {
 }
 
 /* ---------- VIEW 3: share over time (stacked area), by category or visa type ---------- */
+let mixPicked = [];   // visa classes currently drawn individually in the by-type view
+function renderMixChips() {
+  const avail = allClasses.filter(k => !mixPicked.includes(k));
+  const hasPreset = allClasses.includes('H1B') && allClasses.includes('H4');
+  $('extra').innerHTML = `<div class="chips" role="group" aria-label="Visa types shown">
+    ${mixPicked.map((k, i) => `<span class="chip" style="--c:var(--s${i + 1})"><span class="dot"></span>${esc(dispCode(k))}<button type="button" data-mixremove="${esc(k)}" aria-label="Remove ${esc(dispCode(k))}">×</button></span>`).join('')}
+    ${mixPicked.length < 6
+      ? `<select id="mixAdd" aria-label="Add a visa type"><option value="">+ Add visa type…</option>${avail.map(k => `<option value="${esc(k)}">${esc(dispCode(k) + (VISA_INFO[k] ? ' · ' + VISA_INFO[k] : ''))}</option>`).join('')}</select>`
+      : '<span class="note">Maximum of 6 types. Remove one to add another.</span>'}
+    ${hasPreset ? '<button type="button" class="btn" id="mixPreset">H-1B &amp; H-4 only</button>' : ''}
+    ${state.mixTypes ? '<button type="button" class="btn" id="mixReset">Reset to top 6</button>' : ''}
+  </div>`;
+}
+
 function viewMix() {
   const byType = state.group === 'type';
   const TOP = 6;   // how many individual visa types to show before grouping the rest
@@ -776,20 +791,25 @@ function viewMix() {
       color: css(`--s${i + 1}`)
     }));
   } else {
-    const ranked = Array.from(data.get(state.country))
+    const cm = data.get(state.country);
+    const ranked = Array.from(cm)
       .map(([cls, arr]) => [cls, arr, sum(arr)])
       .filter(r => r[2] > 0)
       .sort((a, b) => b[2] - a[2]);
-    groups = ranked.slice(0, TOP).map(([cls, arr], i) => ({
+    // Auto = top 6 for this country; otherwise the user's own pick
+    mixPicked = state.mixTypes ? state.mixTypes.slice() : ranked.slice(0, TOP).map(r => r[0]);
+    const pickedSet = new Set(mixPicked);
+    groups = mixPicked.map((cls, i) => ({
       name: dispCode(cls) + (VISA_INFO[cls] ? ` · ${VISA_INFO[cls]}` : ''),
-      arr,
+      arr: cm.get(cls) || new Float64Array(N),
       color: css(`--s${i + 1}`)
     }));
-    if (ranked.length > TOP) {
-      const other = new Float64Array(N);
-      ranked.slice(TOP).forEach(r => { for (let i = 0; i < N; i++) other[i] += r[1][i]; });
-      groups.push({ name: 'All other types', arr: other, color: css('--muted') });
+    const other = new Float64Array(N);
+    for (const [cls, arr] of cm) {
+      if (!pickedSet.has(cls)) for (let i = 0; i < N; i++) other[i] += arr[i];
     }
+    if (sum(other) > 0) groups.push({ name: 'All other types', arr: other, color: css('--muted') });
+    renderMixChips();
   }
 
   const totals = new Float64Array(N);
@@ -800,7 +820,7 @@ function viewMix() {
   const by = byType ? 'visa type' : 'category';
   const out = {
     title: share ? `Mix of visas issued ${who}, by ${by}` : `Visas issued ${who}, by ${by}`,
-    sub: (share ? 'Share of each month’s total' : 'Monthly issuances, stacked') + (byType ? ` · top ${TOP} visa types for this selection` : ''),
+    sub: (share ? 'Share of each month’s total' : 'Monthly issuances, stacked') + (byType ? (state.mixTypes ? ' · selected visa types' : ` · top ${TOP} visa types for this selection`) : ''),
     head: ['Month', ...groups.map(g => g.name), 'Total'],
     rows: [],
     slug: 'mix-' + (byType ? 'type' : 'category')
@@ -1114,6 +1134,13 @@ $('extra').addEventListener('click', e => {
 });
 $('extra').addEventListener('change', e => {
   if (e.target.id === 'addCountry' && e.target.value) { addCompare(e.target.value); render(); }
+  if (e.target.id === 'mixAdd' && e.target.value) { state.mixTypes = [...mixPicked, e.target.value]; render(); }
+});
+$('extra').addEventListener('click', e => {
+  const r = e.target.closest('button[data-mixremove]');
+  if (r) { state.mixTypes = mixPicked.filter(k => k !== r.dataset.mixremove); render(); return; }
+  if (e.target.closest('#mixPreset')) { state.mixTypes = ['H1B', 'H4'].filter(k => allClasses.includes(k)); render(); return; }
+  if (e.target.closest('#mixReset')) { state.mixTypes = null; render(); }
 });
 
 // Overview cards open the monthly trend for that category
