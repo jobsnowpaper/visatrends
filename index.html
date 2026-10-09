@@ -592,6 +592,7 @@ const state = {
   period: 'all',
   topn: 15,
   scale: 'abs',        // share-over-time and compare: 'abs' | 'share' | 'index'
+  group: 'cat',        // share-over-time: 'cat' | 'type'
   measure: 'monthly',  // compare: 'monthly' | 'avg'
   heat: 'all',         // heatmap colour scale: 'all' | 'row'
   compare: [],         // [{ key, slot }]
@@ -762,27 +763,61 @@ function viewTrend() {
   return out;
 }
 
-/* ---------- VIEW 3: share over time (stacked area) ---------- */
+/* ---------- VIEW 3: share over time (stacked area), by category or visa type ---------- */
 function viewMix() {
-  const cats = CATS.map((_, i) => metricSeries(state.country, 'cat:' + i));
+  const byType = state.group === 'type';
+  const TOP = 6;   // how many individual visa types to show before grouping the rest
+  let groups;      // [{ name, arr, color }]
+
+  if (!byType) {
+    groups = CATS.map((c, i) => ({
+      name: c.name,
+      arr: metricSeries(state.country, 'cat:' + i),
+      color: css(`--s${i + 1}`)
+    }));
+  } else {
+    const ranked = Array.from(data.get(state.country))
+      .map(([cls, arr]) => [cls, arr, sum(arr)])
+      .filter(r => r[2] > 0)
+      .sort((a, b) => b[2] - a[2]);
+    groups = ranked.slice(0, TOP).map(([cls, arr], i) => ({
+      name: dispCode(cls) + (VISA_INFO[cls] ? ` · ${VISA_INFO[cls]}` : ''),
+      arr,
+      color: css(`--s${i + 1}`)
+    }));
+    if (ranked.length > TOP) {
+      const other = new Float64Array(N);
+      ranked.slice(TOP).forEach(r => { for (let i = 0; i < N; i++) other[i] += r[1][i]; });
+      groups.push({ name: 'All other types', arr: other, color: css('--muted') });
+    }
+  }
+
   const totals = new Float64Array(N);
-  cats.forEach(a => { for (let i = 0; i < N; i++) totals[i] += a[i]; });
+  groups.forEach(g => { for (let i = 0; i < N; i++) totals[i] += g.arr[i]; });
+
   const who = state.country === WORLDWIDE ? 'worldwide' : `to ${nameOf(state.country)}`;
   const share = state.scale === 'share';
-  const out = { title: share ? `Category mix of visas issued ${who}` : `Visas issued ${who}, by category`, sub: share ? 'Share of each month’s total' : 'Monthly issuances, stacked', head: ['Month', ...CATS.map(c => c.name), 'Total'], rows: [], slug: 'mix' };
+  const by = byType ? 'visa type' : 'category';
+  const out = {
+    title: share ? `Mix of visas issued ${who}, by ${by}` : `Visas issued ${who}, by ${by}`,
+    sub: (share ? 'Share of each month’s total' : 'Monthly issuances, stacked') + (byType ? ` · top ${TOP} visa types for this selection` : ''),
+    head: ['Month', ...groups.map(g => g.name), 'Total'],
+    rows: [],
+    slug: 'mix-' + (byType ? 'type' : 'category')
+  };
   if (sum(totals) <= 0) { setEmpty('No visas were issued for this selection.'); return out; }
 
   const labels = Array.from({ length: N }, (_, i) => monthLabel(i));
-  labels.forEach((l, i) => out.rows.push([l, ...cats.map(a => a[i]), totals[i]]));
+  labels.forEach((l, i) => out.rows.push([l, ...groups.map(g => g.arr[i]), totals[i]]));
 
-  const order = CATS.map((_, i) => i);
   const surface = css('--surface');
-  const datasets = order.map((ci, k) => ({
-    label: CATS[ci].name,
-    data: Array.from(cats[ci], (v, i) => share ? (totals[i] ? v / totals[i] * 100 : 0) : v),
-    borderColor: surface, backgroundColor: css(`--s${ci + 1}`), borderWidth: 1.5,
+  const datasets = groups.map((g, k) => ({
+    label: g.name,
+    data: Array.from(g.arr, (v, i) => share ? (totals[i] ? v / totals[i] * 100 : 0) : v),
+    borderColor: surface, backgroundColor: g.color, borderWidth: 1.5,
     fill: k === 0 ? 'origin' : '-1', pointRadius: 0, pointHoverRadius: 4, tension: 0.2
   }));
+
   const opts = baseOptions();
   opts.plugins.legend = legendOptions();
   opts.scales.y.stacked = true;
@@ -927,8 +962,11 @@ function viewSeason() {
 const VIEWS = {
   overview: { name: 'Overview', fields: ['country', 'period'], help: 'Visas grouped into six categories, largest first. Each card shows its biggest visa types. Click a card to see its monthly trend.', render: viewOverview, bare: true },
   trend: { name: 'Monthly trend', fields: ['country', 'metric'], help: 'Month-by-month issuances for any visa type, with a 12-month average to smooth out seasonality.', render: viewTrend },
-  mix: { name: 'Share over time', fields: ['country'], help: 'How the six categories stack up each month. Switch to share of total to see how the mix shifts.',
-    toolbar: [{ key: 'scale', label: 'Show', options: [['abs', 'Visas'], ['share', 'Share of total']] }], render: viewMix },
+  mix: { name: 'Share over time', fields: ['country'], help: 'How visas break down each month, by category or by individual visa type. Switch to share of total to see how the mix shifts.',
+    toolbar: [
+      { key: 'group', label: 'Group by', options: [['cat', 'Category'], ['type', 'Visa type']] },
+      { key: 'scale', label: 'Show', options: [['abs', 'Visas'], ['share', 'Share of total']] }
+    ], render: viewMix },
   compare: { name: 'Compare countries', fields: ['metric'], help: 'Plot up to five countries on one chart. Use the index view to compare growth when the volumes are very different.',
     toolbar: [{ key: 'measure', label: 'Measure', options: [['monthly', 'Monthly'], ['avg', '12-month avg']] }, { key: 'scale', label: 'Scale', options: [['abs', 'Visas'], ['index', 'Indexed']] }], render: viewCompare },
   top: { name: 'Top countries', fields: ['metric', 'period', 'topn'], help: 'Which nationalities receive the most visas of a given type. Share is measured against the worldwide total for the same period.', render: viewTop },
@@ -999,7 +1037,7 @@ function csvCell(v) {
 function exportCSV() {
   if (!current || !current.rows.length) return;
   // BOM keeps accented country names intact when opened in Excel
-  const csv = '﻿' + [current.head, ...current.rows].map(r => r.map(csvCell).join(',')).join('\r\n');
+  const csv = '\uFEFF' + [current.head, ...current.rows].map(r => r.map(csvCell).join(',')).join('\r\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
