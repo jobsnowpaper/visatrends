@@ -811,11 +811,13 @@ function viewMix() {
     }
     if (sum(other) > 0) groups.push({ name: 'All other types', arr: other, color: css('--muted') });
 
-    // Worldwide: put F1 (seasonal) at the top of the stack, above "All other types".
+    // Worldwide: put the seasonal types (J1, then F1) at the top of the stack, above "All other types".
     // The first group is drawn at the bottom of the stacked area, the last at the top.
     if (state.country === WORLDWIDE) {
-      const f1 = groups.findIndex(g => g.cls === 'F1');
-      if (f1 !== -1) groups.push(groups.splice(f1, 1)[0]);
+      ['J1', 'F1'].forEach(code => {
+        const idx = groups.findIndex(g => g.cls === code);
+        if (idx !== -1) groups.push(groups.splice(idx, 1)[0]);
+      });
     }
 
     renderMixChips();
