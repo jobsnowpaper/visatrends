@@ -782,7 +782,7 @@ function renderMixChips() {
 function viewMix() {
   const byType = state.group === 'type';
   const TOP = 6;   // how many individual visa types to show before grouping the rest
-  let groups;      // [{ name, arr, color }]
+  let groups;      // [{ cls, name, arr, color }]
 
   if (!byType) {
     groups = CATS.map((c, i) => ({
@@ -800,15 +800,24 @@ function viewMix() {
     mixPicked = state.mixTypes ? state.mixTypes.slice() : ranked.slice(0, TOP).map(r => r[0]);
     const pickedSet = new Set(mixPicked);
     groups = mixPicked.map((cls, i) => ({
+      cls,                                   // visa class, used to reorder the stack below
       name: dispCode(cls) + (VISA_INFO[cls] ? ` · ${VISA_INFO[cls]}` : ''),
       arr: cm.get(cls) || new Float64Array(N),
-      color: css(`--s${i + 1}`)
+      color: css(`--s${i + 1}`)              // colour is assigned before reordering, so it matches the chip
     }));
     const other = new Float64Array(N);
     for (const [cls, arr] of cm) {
       if (!pickedSet.has(cls)) for (let i = 0; i < N; i++) other[i] += arr[i];
     }
     if (sum(other) > 0) groups.push({ name: 'All other types', arr: other, color: css('--muted') });
+
+    // Worldwide: put F1 (seasonal) at the top of the stack, above "All other types".
+    // The first group is drawn at the bottom of the stacked area, the last at the top.
+    if (state.country === WORLDWIDE) {
+      const f1 = groups.findIndex(g => g.cls === 'F1');
+      if (f1 !== -1) groups.push(groups.splice(f1, 1)[0]);
+    }
+
     renderMixChips();
   }
 
